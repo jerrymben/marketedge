@@ -1,0 +1,153 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MarketEdge – application.yml
+#
+#  HOW TO SET YOUR API KEY (never put real keys in this file):
+#    PowerShell current session:  $env:TWELVE_DATA_API_KEY = "your_key_here"
+#    PowerShell permanent:        setx TWELVE_DATA_API_KEY "your_key_here"
+#    Then restart terminal and:   mvn spring-boot:run
+# ═══════════════════════════════════════════════════════════════════════════════
+
+spring:
+  application:
+    name: marketedge-backend
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/marketedge_db
+    username: postgres
+    password: Link@3107
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: MarketEdgePool
+      minimum-idle: 2
+      maximum-pool-size: 10
+      idle-timeout: 30000
+      connection-timeout: 20000
+      max-lifetime: 1800000
+      connection-test-query: SELECT 1
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        hbm2ddl:
+          auto: validate
+        jdbc:
+          lob.non_contextual_creation: true
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
+          max-wait: 500ms
+        shutdown-timeout: 100ms
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000
+      cache-null-values: false
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+    time-zone: UTC
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+  tomcat:
+    use-relative-redirects: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: INFO
+    com.marketedge: DEBUG
+    org.hibernate.SQL: WARN
+    org.springframework.data.redis: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level %logger{30} - %msg%n"
+  file:
+    name: logs/marketedge.log
+
+# ─── MarketEdge ──────────────────────────────────────────────────────────────
+marketedge:
+  twelve-data:
+    # ── API key — from environment variable (see instructions above) ───────────
+    api-key: 0f576e0148a64761b5217120b0aa2285
+    base-url: https://api.twelvedata.com
+
+    # ── Rate budget ────────────────────────────────────────────────────────────
+    # 9 symbols × 1 timeframe = 9 calls per tick.
+    # 9 / 75 s = 7.2 calls/min  <  8/min free-tier limit.  ✓
+    # 5 timeframes × 75 s = 375 s ≈ 6 min for one full rotation.
+    poll-interval-ms: 75000
+
+    # ── Symbols in Twelve Data slash format ────────────────────────────────────
+    symbols:
+      - "XAU/USD"
+      - "EUR/USD"
+      - "GBP/USD"
+      - "USD/JPY"
+      - "GBP/JPY"
+      - "EUR/JPY"
+      - "USD/CHF"
+      - "CHF/JPY"
+      - "GBP/CAD"
+
+    # ── Timeframes the scheduler rotates through ───────────────────────────────
+    # Matches TimeFrameConfig.js exactly.  1min and 30min excluded.
+    # THE SCHEDULER NOW READS THIS LIST (not the singular "timeframe" below).
+    timeframes:
+      - "5min"
+      - "15min"
+      - "1h"
+      - "4h"
+      - "1day"
+
+    # Fallback for fetchOnDemand when called without an explicit timeframe.
+    timeframe: "1h"
+
+    # Bars per Twelve Data API call.
+    # CHANGED: 5 → 1440 (at 5 bars/call it was impossible to seed 1440 candles).
+    output-size: 1440
+
+  redis:
+    candle-channel: market_data_stream
+    candle-cache-prefix: "candle:cache:"
+    candle-ttl-seconds: 3600      # fallback default
+
+    # Per-timeframe TTLs sized to cover the full visible chart range:
+    timeframe-ttl-seconds:
+      5min:  432000      #  5 days  = 1440 × 5min candles
+      15min: 1296000     # 15 days  = 1440 × 15min candles
+      1h:    2592000     # 30 days  = 720  × 1h candles
+      4h:    5184000     # 60 days  = 360  × 4h candles
+      1day:  7776000     # 90 days  = 90   × 1day candles
+
+    # Sorted-set size cap per key — oldest entries trimmed on every write.
+    max-candles-per-key: 1440

@@ -1,0 +1,416 @@
+/* App.css — MarketEdge Dark Terminal Theme
+   Design language: professional trading terminal, not a dashboard template.
+   Palette: slate-900 background, slate-700 panels, emerald/red signals,
+   Inter for data, mono for prices. No rounded-card softness — sharp grid lines. */
+
+/* ── Reset & base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-base:      #0f172a;   /* slate-900 */
+  --bg-panel:     #1e293b;   /* slate-800 */
+  --bg-surface:   #263347;   /* between 800/700 */
+  --border:       #334155;   /* slate-700 */
+  --border-light: #475569;   /* slate-600 */
+  --text-primary: #f1f5f9;   /* slate-100 */
+  --text-secondary:#94a3b8;  /* slate-400 */
+  --text-muted:   #64748b;   /* slate-500 */
+  --green:        #22c55e;   /* green-500  (BUY / profit) */
+  --green-dim:    #166534;   /* green-800  (BUY bg) */
+  --red:          #ef4444;   /* red-500    (SELL / loss) */
+  --red-dim:      #7f1d1d;   /* red-900    (SELL bg) */
+  --amber:        #f59e0b;   /* amber-500  (warning) */
+  --accent:       #38bdf8;   /* sky-400    (logo / active) */
+  --font-ui:      'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  --radius-sm:    2px;
+  --radius:       4px;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Dashboard shell ─────────────────────────────────────────────────────── */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 16px;
+  height: 52px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.logo-mark { font-size: 20px; color: var(--accent); }
+.logo-text  { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-primary); }
+
+/* ── Control bar ─────────────────────────────────────────────────────────── */
+.control-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.control-select {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 4px 28px 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.control-select:focus { outline: 1px solid var(--accent); }
+
+.timeframe-pills {
+  display: flex;
+  gap: 2px;
+}
+
+.pill {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s, color 0.1s;
+}
+.pill:hover { background: var(--bg-surface); color: var(--text-primary); }
+.pill-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.refresh-btn {
+  margin-left: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.refresh-btn:hover:not(:disabled) { background: var(--border); }
+.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Error banner ────────────────────────────────────────────────────────── */
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--red-dim);
+  border-bottom: 1px solid var(--red);
+  color: #fca5a5;
+  padding: 8px 16px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.error-dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.7;
+}
+.error-dismiss:hover { opacity: 1; }
+
+/* ── Body: chart + sidebar ───────────────────────────────────────────────── */
+.dashboard-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chart-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  padding: 12px;
+}
+
+/* ── Loading screen ──────────────────────────────────────────────────────── */
+.loading-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-muted);
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Chart wrapper ───────────────────────────────────────────────────────── */
+.chart-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.chart-title {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chart-live-badge {
+  font-size: 10px;
+  color: var(--green);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.chart-container {
+  flex: 1;
+}
+
+/* ── Signal panel ────────────────────────────────────────────────────────── */
+.panel-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.no-signals {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 24px 0;
+}
+
+.signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signal-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: var(--bg-base);
+}
+.signal-buy  { border-left: 3px solid var(--green); }
+.signal-sell { border-left: 3px solid var(--red); }
+
+.signal-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.signal-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.06em;
+}
+.badge-buy  { background: var(--green-dim); color: var(--green); }
+.badge-sell { background: var(--red-dim);   color: var(--red);   }
+
+.signal-strategy { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+.signal-symbol   { font-size: 10px; color: var(--text-muted); margin-left: auto; }
+
+.signal-grid { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+
+.signal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.signal-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.signal-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+}
+.signal-sl { color: var(--red); }
+.signal-tp { color: var(--green); }
+
+.signal-reason {
+  font-size: 10px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.signal-time {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 16px;
+  height: 32px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-text  { color: var(--text-secondary); }
+.status-error { color: var(--red); font-size: 10px; }
+
+.health-info {
+  display: flex;
+  gap: 16px;
+  color: var(--text-muted);
+}
+
+.health-item strong { color: var(--text-secondary); }
+
+.status-brand {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+/* ── PATCH: additions to App.css for Bug fixes ─────────────────────────── */
+
+/* Chart loading overlay — sits over chart without destroying it (Bug 1 fix) */
+.chart-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(2px);
+  color: var(--text-muted);
+  font-size: 12px;
+  z-index: 10;
+}
+
+/* Signal card states for NO_TRADE and INSUFFICIENT_DATA (Bug 4 fix) */
+.signal-wait { border-left: 3px solid var(--text-muted); opacity: 0.75; }
+.signal-data { border-left: 3px solid var(--amber);      opacity: 0.6;  }
+
+.badge-wait {
+  background: #1e293b;
+  color: var(--text-muted);
+}
+.badge-data {
+  background: #451a03;
+  color: var(--amber);
+}
