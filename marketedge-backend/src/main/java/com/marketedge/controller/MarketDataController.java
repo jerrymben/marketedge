@@ -1,7 +1,9 @@
 package com.marketedge.controller;
 
 import com.marketedge.model.Candle;
+import com.marketedge.model.TradeRecord;
 import com.marketedge.repository.CandleRepository;
+import com.marketedge.repository.TradeRecordRepository;
 import com.marketedge.service.ApiRateLimiter;
 import com.marketedge.service.MarketDataService;
 import com.marketedge.service.StrategyEngineService;
@@ -16,6 +18,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,8 +73,58 @@ public class MarketDataController {
     private final MarketDataService     marketDataService;
     private final StrategyEngineService strategyEngineService;
     private final CandleRepository      candleRepository;
+    private final TradeRecordRepository tradeRecordRepository; // FIX: needed for the recent-trades endpoint
     private final ApiRateLimiter        rateLimiter;
     private final WebSocketBroadcaster  webSocketBroadcaster;
+
+    private static final int DEFAULT_HISTORY_DAYS = 5;
+    private static final int MAX_HISTORY_DAYS     = 30; // sanity cap — avoid an unbounded full-table scan
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Persistent strategy-performance fallback (survives a browser refresh)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * GET /api/candles/trades/recent?symbol=XAU%2FUSD&days=5
+     *
+     * Returns every TradeRecord for the given symbol evaluated within the
+     * last {@code days} days, newest first, across ALL strategies and
+     * timeframes.
+     *
+     * <p>This backs Dashboard.jsx's persistent "last triggered setup" fallback:
+     * on page load (and on every symbol change), the frontend calls this once,
+     * then reduces the result down to "most recent trade per strategyName" —
+     * the same reduction it already applies to the live WebSocket signal
+     * stream — so a strategy that's outside its active window (per the
+     * Mon–Wed / Mon–Fri schedules each strategy enforces) still shows its
+     * last real result instead of a blank "Pending initialization…" card.
+     */
+    @GetMapping("/trades/recent")
+    public ResponseEntity<List<TradeRecord>> getRecentTrades(
+            @RequestParam                        String symbol,
+            @RequestParam(defaultValue = "5")    int    days) {
+
+        int safeDays = Math.min(Math.max(days, 1), MAX_HISTORY_DAYS);
+
+        // NOTE: TradeRecord.evaluatedAt is a LocalDateTime captured via
+        // LocalDateTime.now() (JVM default zone) in StrategySignal/SignalLifecycleTracker,
+        // NOT an Instant in UTC like Candle.timestamp. The cutoff below
+        // deliberately uses the same LocalDateTime.now() convention (no
+        // explicit zone) so both sides of the comparison agree, regardless of
+        // which zone this JVM actually runs in. If the backend's default
+        // timezone is ever changed, this stays correct; if a *different*
+        // zone convention is later introduced for evaluatedAt, this cutoff
+        // needs to be updated to match.
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(safeDays);
+
+        log.debug("[REST] GET /candles/trades/recent symbol='{}' days={} cutoff={}",
+                symbol, safeDays, cutoff);
+
+        List<TradeRecord> trades =
+                tradeRecordRepository.findBySymbolAndEvaluatedAtAfterOrderByEvaluatedAtDesc(symbol, cutoff);
+
+        return ResponseEntity.ok(trades);
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  1. Historical candles

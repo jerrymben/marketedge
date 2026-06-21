@@ -21,15 +21,25 @@ import java.util.Optional;
  * Strategy 1 — Fusion Flow
  *
  * ════════════════════════════════════════════════════════════════════════
- *  THIS FILE REPLACES THE OLD "Fusion Flow" IMPLEMENTATION
+ *  UPDATE (this pass): live evaluation window confirmed
  * ════════════════════════════════════════════════════════════════════════
- *  The previous version was a same-day PDH/PDL liquidity-sweep reversal
- *  strategy that ran on every timeframe and every day. That doesn't match
- *  the spec at all — it just happened to share the name "Fusion Flow".
- *  The logic below is rebuilt from the spec:
+ *  An earlier pass removed the "current candle must be in London session"
+ *  gate, reasoning that "Consider only on London Session" referred only to
+ *  which candles define the *reference day's* high/low. The user's strategy
+ *  execution timetable clarifies that this was wrong: Fusion Flow's
+ *  "wait for FVG / execute" phase is genuinely scoped to 08:00–16:00 UTC
+ *  (04:00 AM–12:00 PM UTC-4 / 1:30 PM–9:30 PM IST) on its active days. That
+ *  gate is restored below — but layered correctly this time, as one of
+ *  three conditions (day-of-week AND timeframe AND session window) that
+ *  must all hold, rather than the sole gate that caused the original
+ *  "Outside London session — strategy inactive" bug on every day/timeframe.
  *
+ * ════════════════════════════════════════════════════════════════════════
+ *  SPEC SUMMARY
+ * ════════════════════════════════════════════════════════════════════════
  *  - Bank-trading-concepts strategy. Applies ONLY Monday, Tuesday, Wednesday.
  *  - Applies ONLY on the 15-minute timeframe.
+ *  - Live evaluation window: 08:00–16:00 UTC (London session).
  *  - Reference day:
  *        Monday    → previous Friday    (today − 3)
  *        Tuesday   → previous Monday    (today − 1)
@@ -103,7 +113,20 @@ public class FusionFlowStrategy implements TradingStrategy {
                     "Fusion Flow only trades Monday–Wednesday (today is " + dow + ")");
         }
 
-        // ── Guard 3: minimum context for the 3-candle imbalance check ──────────
+        // ── Guard 3: live evaluation window (08:00–16:00 UTC / London session) ─
+        // Per the strategy execution timetable: Fusion Flow's "wait for FVG /
+        // execute" phase only runs 08:00–16:00 UTC (04:00 AM–12:00 PM UTC-4,
+        // 1:30 PM–9:30 PM IST) on its active days. This is layered ON TOP of
+        // the day-of-week and timeframe guards above — by itself this check
+        // was the original bug ("Outside London session — strategy inactive"
+        // firing on every day/timeframe); here it's one of three conditions
+        // that must ALL hold, which is what the schedule actually specifies.
+        if (!CandleUtils.isLondonSession(latestCandle)) {
+            return StrategySignal.noTrade(NAME, symbol, timeframe,
+                    "Outside Fusion Flow's active window (08:00–16:00 UTC / London session)");
+        }
+
+        // ── Guard 4: minimum context for the 3-candle imbalance check ──────────
         if (historicalData == null || historicalData.size() < 2) {
             return StrategySignal.insufficientData(NAME, symbol, timeframe,
                     "Insufficient historical data context (need ≥ 2 bars)");

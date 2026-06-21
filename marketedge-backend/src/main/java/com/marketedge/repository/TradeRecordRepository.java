@@ -29,6 +29,22 @@ public interface TradeRecordRepository extends JpaRepository<TradeRecord, Long> 
 
     Optional<TradeRecord> findBySignalId(String signalId);
 
+    // ── Dashboard: persistent "recent performance" fallback ───────────────────
+
+    /**
+     * Returns every trade for a symbol evaluated after {@code cutoff}, newest
+     * first — across ALL strategies and timeframes. Used by
+     * GET /candles/trades/recent so the dashboard can show "last triggered
+     * setup" per strategy even right after a browser refresh, instead of only
+     * holding it in (volatile) React state.
+     *
+     * Deliberately not filtered by strategyName or timeframe: the frontend
+     * reduces this down to "most recent per strategyName" itself, the same
+     * way it already reduces the live WebSocket signal stream.
+     */
+    List<TradeRecord> findBySymbolAndEvaluatedAtAfterOrderByEvaluatedAtDesc(
+            String symbol, LocalDateTime cutoff);
+
     // ── Dashboard: recent signals ──────────────────────────────────────────────
 
     List<TradeRecord> findByStrategyNameOrderByEvaluatedAtDesc(

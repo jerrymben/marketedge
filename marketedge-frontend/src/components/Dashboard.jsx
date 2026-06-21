@@ -10,6 +10,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import {
   fetchCandles,
   fetchSymbols,
+  fetchRecentTrades,
   triggerFetch,
   toDisplaySymbol,
 } from '../services/api';
@@ -70,16 +71,52 @@ export default function Dashboard() {
   // independent of symbol/timeframe filtering — that filtering happens later,
   // in currentLastHitSignals below, the same way filteredSignals already
   // filters the live `signals` array.
+  //
+  // FIX (this pass): this now also receives historical TradeRecord rows from
+  // the persistent-fallback fetch below. Both paths funnel through here, so
+  // a timestamp guard is needed — a delayed historical fetch resolving after
+  // a fresh live hit must not overwrite it, and an out-of-order historical
+  // record must not overwrite a more recent one already stored.
   const recordIfActionable = useCallback((signal) => {
     if (!signal || !signal.strategyName || !signal.symbol) return;
     const actionable = signal.signalType === 'BUY' || signal.signalType === 'SELL';
     if (!actionable) return;
 
-    setLastHitSignals((prev) => ({
-      ...prev,
-      [`${signal.strategyName}|${signal.symbol}`]: signal,
-    }));
+    const key = `${signal.strategyName}|${signal.symbol}`;
+
+    setLastHitSignals((prev) => {
+      const existing = prev[key];
+      if (existing) {
+        const existingTime = new Date(existing.evaluatedAt || existing.triggeredAt || 0).getTime();
+        const incomingTime = new Date(signal.evaluatedAt || signal.triggeredAt || 0).getTime();
+        if (Number.isFinite(existingTime) && Number.isFinite(incomingTime) && incomingTime < existingTime) {
+          return prev; // what we already have is newer — keep it
+        }
+      }
+      return { ...prev, [key]: signal };
+    });
   }, []);
+
+  // FIX: on mount and on every symbol change, seed lastHitSignals from the
+  // database via GET /candles/trades/recent — this is what makes "last
+  // triggered setup" survive a browser refresh instead of living only in
+  // (volatile) React state.
+  const seedHistoricalSignals = useCallback(async (sym) => {
+    try {
+      const trades = await fetchRecentTrades(sym, 5);
+      if (Array.isArray(trades)) {
+        trades.forEach(recordIfActionable);
+      }
+    } catch (err) {
+      // Non-fatal — the live WebSocket feed will still populate this over
+      // time. Just means the panel starts blank instead of pre-filled.
+      console.warn('[Dashboard] Failed to load recent trade history:', err?.message);
+    }
+  }, [recordIfActionable]);
+
+  useEffect(() => {
+    seedHistoricalSignals(symbol);
+  }, [symbol, seedHistoricalSignals]);
 
   const handleSignal = useCallback((signal) => {
     recordIfActionable(signal);
@@ -210,7 +247,10 @@ export default function Dashboard() {
   // Derived Data (Optimized & Filtered by workspace)
   // ─────────────────────────────────────────────────────────────
 
-  // ✅ FIX: Filters the global streaming feed to avoid overlay cross-contamination
+  // ✅ FIX: Filters the global streaming feed to avoid overlay cross-contamination.
+  // Kept timeframe-matched — this feeds the CHART price lines (latestSignals
+  // below), where drawing a 15-minute entry/SL/TP line on a 1-hour chart's
+  // price scale would be misleading.
   const filteredSignals = useMemo(() => {
     return signals.filter((s) => {
       if (!s) return false;
@@ -226,6 +266,23 @@ export default function Dashboard() {
     });
   }, [signals, symbol, timeframe]);
 
+  // FIX (this pass): the Signal PANEL is symbol-only filtered, deliberately
+  // NOT timeframe-filtered. Fusion Flow only ever runs on 15min and
+  // SigmaStream only on 5min — if this stayed timeframe-matched the same way
+  // filteredSignals is, those two cards would show "Pending initialization…"
+  // for as long as you're looking at any OTHER chart timeframe, even though
+  // both strategies are very much alive in the backend. The panel reports
+  // each strategy's own status; only the chart overlay needs to match the
+  // chart's own timeframe.
+  const signalsForPanel = useMemo(() => {
+    return signals.filter((s) => {
+      if (!s) return false;
+      const signalSymClean = s.symbol?.replace('/', '').toUpperCase();
+      const currentSymClean = symbol?.replace('/', '').toUpperCase();
+      return signalSymClean === currentSymClean;
+    });
+  }, [signals, symbol]);
+
   // Use the filtered set to map out singular strategy states for the chart lines
   const latestSignals = useMemo(() => {
     const map = new Map();
@@ -240,9 +297,12 @@ export default function Dashboard() {
   }, [filteredSignals]);
 
   // FIX: project the global lastHitSignals map down to "strategyName -> signal"
-  // for the symbol/timeframe currently on screen, the same way filteredSignals
-  // narrows the live `signals` array. Passed to SignalPanel as a fallback so
-  // it can show "last triggered setup" when nothing is live right now.
+  // for the symbol currently on screen (symbol-only, same reasoning as
+  // signalsForPanel above — Fusion Flow's last 15min hit should still show
+  // while you're looking at the 1h chart). Passed to SignalPanel as a
+  // fallback so it can show "last triggered setup" when nothing is live
+  // right now, whether that's because the strategy is outside its active
+  // window or simply because the page was just refreshed.
   const currentLastHitSignals = useMemo(() => {
     const out = {};
     const currentSymClean = symbol?.replace('/', '').toUpperCase();
@@ -250,14 +310,13 @@ export default function Dashboard() {
     Object.values(lastHitSignals).forEach((s) => {
       if (!s) return;
       const signalSymClean = s.symbol?.replace('/', '').toUpperCase();
-      const isTimeframeMatch = !s.timeframe || s.timeframe === timeframe;
-      if (signalSymClean === currentSymClean && isTimeframeMatch) {
+      if (signalSymClean === currentSymClean) {
         out[s.strategyName] = s;
       }
     });
 
     return out;
-  }, [lastHitSignals, symbol, timeframe]);
+  }, [lastHitSignals, symbol]);
 
   // ─────────────────────────────────────────────────────────────
   // UI
@@ -308,9 +367,10 @@ export default function Dashboard() {
 
         <aside className="sidebar">
           {/* ✅ FIX: Pass the cleaned filtered signals instead of global array.
-              FIX (this pass): also pass lastHitSignals so a strategy with no
-              live setup right now still shows the last one it fired. */}
-          <SignalPanel signals={filteredSignals} lastHitSignals={currentLastHitSignals} />
+              FIX (this pass): signalsForPanel (symbol-only) instead of
+              filteredSignals (symbol+timeframe) — see comment above — plus
+              lastHitSignals as the persistent fallback. */}
+          <SignalPanel signals={signalsForPanel} lastHitSignals={currentLastHitSignals} />
         </aside>
       </div>
 

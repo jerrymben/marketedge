@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -97,6 +98,15 @@ public class SigmaStreamStrategy implements TradingStrategy {
         }
 
         final LocalTime nyTime = latestCandle.getTimestamp().atZone(ZONE_NY).toLocalTime();
+
+        // FIX: per the execution timetable, SigmaStream's active days are
+        // Mon–Fri. Checked in NY time, same zone as every other window check
+        // in this strategy.
+        final DayOfWeek dow = latestCandle.getTimestamp().atZone(ZONE_NY).getDayOfWeek();
+        if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            return StrategySignal.noTrade(NAME, symbol, timeframe,
+                    "SigmaStream only trades Monday–Friday (today is " + dow + " in UTC-4/NY)");
+        }
 
         // ── Guard: still building the range (FIX — now NY time, not UTC) ───────
         if (nyTime.isBefore(RANGE_END)) {

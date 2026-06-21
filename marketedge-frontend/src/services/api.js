@@ -110,6 +110,24 @@ export const triggerFetch = (displaySymbol, timeframe) =>
     })
     .then((r) => r.data);
 
+/**
+ * Fetch every TradeRecord for a symbol from the last `days` days, across all
+ * strategies and timeframes, newest first.
+ *
+ * Backs the persistent "last triggered setup" fallback in Dashboard.jsx —
+ * called on mount and on every symbol change so the signal panel survives a
+ * browser refresh instead of resetting to "Pending initialization…" until
+ * the next live WebSocket hit.
+ *
+ * URL: GET /api/candles/trades/recent?symbol=...&days=5
+ */
+export const fetchRecentTrades = (displaySymbol, days = 5) =>
+  client
+    .get('/candles/trades/recent', {
+      params: { symbol: toApiSymbol(displaySymbol), days },
+    })
+    .then((r) => r.data);
+
 // ── Metadata ──────────────────────────────────────────────────────────────────
 
 /** Returns symbols from DB in Twelve Data slash format ("XAU/USD"). */

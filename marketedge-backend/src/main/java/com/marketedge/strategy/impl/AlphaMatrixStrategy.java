@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -178,6 +179,16 @@ public class AlphaMatrixStrategy implements TradingStrategy {
         if (historicalData == null || historicalData.size() < 2) {
             return StrategySignal.insufficientData(NAME, symbol, timeframe,
                     "Insufficient historical data (need ≥ 2 bars)");
+        }
+
+        // FIX: per the execution timetable, Alpha Matrix's active days are
+        // Mon–Fri. Checked in the same NY zone as the entry window below, so
+        // a Sunday-evening candle (FX reopens ~22:00 UTC Sunday, which can
+        // already read as Sunday evening in NY time) doesn't slip through.
+        final DayOfWeek dow = latestCandle.getTimestamp().atZone(ZONE_UTC4).getDayOfWeek();
+        if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+            return StrategySignal.noTrade(NAME, symbol, timeframe,
+                    "Alpha Matrix only trades Monday–Friday (today is " + dow + " in UTC-4)");
         }
 
         if (!isWithinEntryWindow(latestCandle)) {

@@ -20,6 +20,27 @@ const useUtcClock = () => {
 // never deleted from the backend and is still running alongside the new one.
 const STRATEGY_NAMES = ['Fusion Flow', 'Alpha Matrix', 'SigmaStream'];
 
+// Active-window reference (per the strategy refresh/execution timetable).
+// Purely informational — tells the trader when to expect each card to go
+// live again, instead of leaving them guessing why a card looks "inactive".
+const STRATEGY_SCHEDULE = {
+  'Fusion Flow': {
+    days: 'Mon–Wed',
+    local: '08:00–16:00 UTC',
+    ist:   '1:30 PM–9:30 PM IST',
+  },
+  'Alpha Matrix': {
+    days: 'Mon–Fri',
+    local: '10:05–03:45 UTC (next day)',
+    ist:   '3:35 PM–9:15 AM IST (next day)',
+  },
+  'SigmaStream': {
+    days: 'Mon–Fri',
+    local: '04:00–08:30 UTC range · 08:30–16:00 UTC entry',
+    ist:   '9:30 AM–6:00 PM IST range · 6:00 PM–9:30 PM IST entry',
+  },
+};
+
 const STATE_STYLE = {
   BUY:               { badge: 'badge-buy',    card: 'signal-buy'  },
   SELL:              { badge: 'badge-sell',   card: 'signal-sell' },
@@ -93,6 +114,13 @@ function SignalCard({ name, signal, liveReason }) {
       <div className="signal-card signal-empty">
         <h4>{name}</h4>
         <p>Pending initialization...</p>
+        {STRATEGY_SCHEDULE[name] && (
+          <div className="signal-schedule-hint">
+            Active: {STRATEGY_SCHEDULE[name].days} · {STRATEGY_SCHEDULE[name].local}
+            <br />
+            ({STRATEGY_SCHEDULE[name].ist})
+          </div>
+        )}
       </div>
     );
   }
@@ -117,7 +145,10 @@ function SignalCard({ name, signal, liveReason }) {
       )}
 
       <div className="signal-details">
-        <div className="signal-pair">{signal.symbol}</div>
+        <div className="signal-pair">
+          {signal.symbol}
+          {signal.timeframe && <span className="signal-timeframe"> · {signal.timeframe}</span>}
+        </div>
       </div>
 
       {/* Trade Parameters (Entry/SL/TP) */}
@@ -152,6 +183,14 @@ function SignalCard({ name, signal, liveReason }) {
       <div className="signal-time">
         {timestamp ? fmtTime(timestamp) : '—'}
       </div>
+
+      {STRATEGY_SCHEDULE[name] && (
+        <div className="signal-schedule-hint">
+          Active: {STRATEGY_SCHEDULE[name].days} · {STRATEGY_SCHEDULE[name].local}
+          <br />
+          ({STRATEGY_SCHEDULE[name].ist})
+        </div>
+      )}
     </div>
   );
 }
