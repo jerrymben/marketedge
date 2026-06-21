@@ -31,3 +31,16 @@ build/
 
 ### VS Code ###
 .vscode/
+# Logs
+*.log
+*.gz
+
+# Java
+target/
+
+# Node
+node_modules/
+
+# IDE
+.idea/
+.vscode/
